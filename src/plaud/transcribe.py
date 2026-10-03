@@ -1,3 +1,5 @@
+import ctypes
+import importlib.util
 import os
 import platform
 import sys
@@ -16,10 +18,17 @@ DEFAULT_MODELS = {
 _DECODE = {"condition_on_previous_text": False, "hallucination_silence_threshold": 2.0}
 
 
+class TranscribeError(RuntimeError):
+    pass
+
+
 def backend(system: str | None = None, machine: str | None = None) -> str:
-    """mlx-whisper on Apple Silicon, faster-whisper elsewhere; PLAUD_ASR_BACKEND overrides."""
+    """mlx-whisper on Apple Silicon, faster-whisper on Linux; PLAUD_ASR_BACKEND overrides."""
     forced = os.environ.get("PLAUD_ASR_BACKEND")
     if forced:
+        if forced not in DEFAULT_MODELS:
+            raise TranscribeError(f"PLAUD_ASR_BACKEND must be one of: {', '.join(DEFAULT_MODELS)}"
+                                  f" (got '{forced}')")
         return forced
     system = system or sys.platform
     machine = machine or platform.machine()
@@ -54,20 +63,47 @@ def _transcribe_mlx(wav: Path, model: str, language: str | None) -> dict:
         str(wav), path_or_hf_repo=model, word_timestamps=True, language=language, **_DECODE)
 
 
-def _transcribe_faster_whisper(wav: Path, model: str, language: str | None) -> dict:
-    import ctranslate2
-    import soundfile as sf
+# CTranslate2 opens these by name; dependencies first. pip's nvidia wheels put them in
+# site-packages/nvidia/*/lib, which is not on the loader path.
+_CUDA_LIBS = ["libcublasLt.so.12", "libcublas.so.12", "libcudnn.so.9", "libcudnn_*.so.9"]
+
+
+def preload_cuda_libs(lib_dirs: list[Path], loader=None) -> None:
+    loader = loader or (lambda path: ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL))
+    done = set()
+    for pattern in _CUDA_LIBS:
+        for d in lib_dirs:
+            for lib in sorted(d.glob(pattern)):
+                if lib.name in done:
+                    continue
+                done.add(lib.name)
+                try:
+                    loader(str(lib))
+                except OSError:
+                    pass  # CTranslate2 reports what is really missing; we then fall back to CPU.
+
+
+def _preload_cuda_libs() -> None:
+    dirs = []
+    for pkg in ("nvidia.cublas", "nvidia.cudnn"):
+        try:
+            spec = importlib.util.find_spec(pkg)
+        except ModuleNotFoundError:
+            spec = None
+        if spec and spec.submodule_search_locations:
+            dirs += [Path(p) / "lib" for p in spec.submodule_search_locations]
+    preload_cuda_libs(dirs)
+
+
+def _run_faster_whisper(audio, model: str, language: str | None, device: str) -> dict:
     from faster_whisper import WhisperModel
 
-    gpu = ctranslate2.get_cuda_device_count() > 0
-    whisper = WhisperModel(model, device="cuda" if gpu else "cpu",
-                           compute_type="float16" if gpu else "int8")
-    # Pass samples, not the path: faster-whisper's own decoder (PyAV) breaks with PyAV 19.
-    # The wav is already 16 kHz mono, which is what Whisper expects.
-    audio, _ = sf.read(str(wav), dtype="float32")
+    whisper = WhisperModel(model, device=device,
+                           compute_type="auto" if device == "cuda" else "int8")
     segments, info = whisper.transcribe(
         audio, language=language, word_timestamps=True, vad_filter=True, **_DECODE)
     # Same shape as mlx-whisper's result, so both backends share words_from_result.
+    # Iterating here runs the decoding (segments is lazy), so GPU errors surface inside.
     return {
         "language": info.language,
         "segments": [
@@ -76,6 +112,23 @@ def _transcribe_faster_whisper(wav: Path, model: str, language: str | None) -> d
             for s in segments
         ],
     }
+
+
+def _transcribe_faster_whisper(wav: Path, model: str, language: str | None) -> dict:
+    import ctranslate2
+    import soundfile as sf
+
+    # Pass samples, not the path: faster-whisper's own decoder (PyAV) breaks with PyAV 19.
+    # The wav is already 16 kHz mono, which is what Whisper expects.
+    audio, _ = sf.read(str(wav), dtype="float32")
+    if ctranslate2.get_cuda_device_count() > 0:
+        _preload_cuda_libs()
+        try:
+            return _run_faster_whisper(audio, model, language, "cuda")
+        except (RuntimeError, ValueError) as e:
+            print(f"plaud: GPU transcription failed ({e}); falling back to CPU.",
+                  file=sys.stderr)
+    return _run_faster_whisper(audio, model, language, "cpu")
 
 
 def transcribe(wav: Path, model: str | None = None,

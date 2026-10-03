@@ -90,7 +90,7 @@ def test_backend_selection(monkeypatch):
     assert backend("darwin", "arm64") == "mlx"
     assert backend("linux", "x86_64") == "faster-whisper"
     assert backend("linux", "aarch64") == "faster-whisper"
-    assert backend("darwin", "x86_64") == "faster-whisper"  # Intel Mac
+    assert backend("darwin", "x86_64") == "faster-whisper"  # not Apple Silicon
     monkeypatch.setenv("PLAUD_ASR_BACKEND", "faster-whisper")
     assert backend("darwin", "arm64") == "faster-whisper"
 
@@ -102,19 +102,26 @@ def test_default_model_per_backend():
     assert default_model("faster-whisper") == "large-v3"
 
 
-def _fake_faster_whisper(monkeypatch, cuda_devices):
+def _fake_faster_whisper(monkeypatch, cuda_devices, cuda_error=None):
     import sys
     import types
 
-    seen = {}
+    seen = {"devices": []}
 
     class WhisperModel:
         def __init__(self, model, **kw):
             seen["model"], seen["init"] = model, kw
+            seen["devices"].append(kw["device"])
+            self.device = kw["device"]
 
         def transcribe(self, audio, **kw):
             seen["audio"], seen["transcribe"] = audio, kw
             ns = types.SimpleNamespace
+            if self.device == "cuda" and cuda_error:
+                def failing():
+                    raise cuda_error
+                    yield
+                return failing(), ns(language="fr")
             segments = [
                 ns(no_speech_prob=0.1, avg_logprob=-0.2,
                    words=[ns(word=" Bonjour", start=0.0, end=0.4),
@@ -165,11 +172,17 @@ def test_faster_whisper_backend_cpu(monkeypatch, tmp_path):
 def test_faster_whisper_backend_uses_gpu_when_present(monkeypatch, tmp_path):
     from plaud.transcribe import transcribe
 
+    import plaud.transcribe as t
+
     seen = _fake_faster_whisper(monkeypatch, cuda_devices=1)
+    preloaded = []
+    monkeypatch.setattr(t, "_preload_cuda_libs", lambda: preloaded.append(True))
     transcribe(_silent_wav(tmp_path / "x.wav"), model="large-v3", language="fr")
     assert seen["init"]["device"] == "cuda"
-    assert seen["init"]["compute_type"] == "float16"
+    # Let CTranslate2 pick: float16 is not supported on every GPU.
+    assert seen["init"]["compute_type"] == "auto"
     assert seen["transcribe"]["language"] == "fr"
+    assert preloaded == [True]
 
 
 def test_transcribe_default_model_follows_backend(monkeypatch, tmp_path):
@@ -178,3 +191,50 @@ def test_transcribe_default_model_follows_backend(monkeypatch, tmp_path):
     seen = _fake_faster_whisper(monkeypatch, cuda_devices=0)
     transcribe(_silent_wav(tmp_path / "x.wav"))
     assert seen["model"] == "large-v3"
+
+
+def test_faster_whisper_falls_back_to_cpu_when_gpu_fails(monkeypatch, tmp_path, capsys):
+    import plaud.transcribe as t
+    from plaud.transcribe import transcribe
+
+    seen = _fake_faster_whisper(
+        monkeypatch, cuda_devices=1,
+        cuda_error=RuntimeError("Library libcublas.so.12 is not found or cannot be loaded"))
+    monkeypatch.setattr(t, "_preload_cuda_libs", lambda: None)
+    words, lang = transcribe(_silent_wav(tmp_path / "x.wav"), model="large-v3")
+    assert seen["devices"] == ["cuda", "cpu"]
+    assert seen["init"]["compute_type"] == "int8"
+    assert words[0] == Word(" Bonjour", 0.0, 0.4)
+    err = capsys.readouterr().err
+    assert "falling back to CPU" in err and "libcublas.so.12" in err
+
+
+def test_preload_cuda_libs_order_and_errors(tmp_path):
+    from plaud.transcribe import preload_cuda_libs
+
+    cublas, cudnn = tmp_path / "cublas" / "lib", tmp_path / "cudnn" / "lib"
+    cublas.mkdir(parents=True)
+    cudnn.mkdir(parents=True)
+    for name in ["libcublas.so.12", "libcublasLt.so.12", "libnvblas.so.12"]:
+        (cublas / name).touch()
+    for name in ["libcudnn_ops.so.9", "libcudnn.so.9", "libcudnn_graph.so.9"]:
+        (cudnn / name).touch()
+    loaded = []
+
+    def loader(path):
+        if path.endswith("libcudnn_graph.so.9"):
+            raise OSError("missing dependency")
+        loaded.append(path.rsplit("/", 1)[1])
+
+    preload_cuda_libs([cublas, cudnn], loader)
+    # Dependencies first; a library that fails to load does not stop the others.
+    assert loaded == ["libcublasLt.so.12", "libcublas.so.12", "libcudnn.so.9",
+                      "libcudnn_ops.so.9"]
+
+
+def test_unknown_backend_rejected(monkeypatch):
+    from plaud.transcribe import TranscribeError, backend
+
+    monkeypatch.setenv("PLAUD_ASR_BACKEND", "faster_whisper")
+    with pytest.raises(TranscribeError, match="mlx, faster-whisper"):
+        backend()
