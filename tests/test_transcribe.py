@@ -18,10 +18,11 @@ RESULT = {
 
 
 def test_words_from_result():
+    # Whisper's spacing is kept: it is what tells "l'arrêté" from "l arrêté".
     assert words_from_result(RESULT) == [
-        Word("Bonjour", 0.0, 0.4),
-        Word("à", 0.4, 0.5),
-        Word("tous.", 0.6, 1.0),
+        Word(" Bonjour", 0.0, 0.4),
+        Word(" à", 0.4, 0.5),
+        Word(" tous.", 0.6, 1.0),
     ]
 
 
@@ -56,7 +57,7 @@ def test_words_from_result_drops_likely_hallucinated_segments():
         {"no_speech_prob": 0.9, "avg_logprob": -0.2,
          "words": [{"word": " Oui.", "start": 1.0, "end": 1.2}]},
     ]}
-    assert words_from_result(result) == [Word("Oui.", 1.0, 1.2)]
+    assert words_from_result(result) == [Word(" Oui.", 1.0, 1.2)]
 
 
 def test_transcribe_passes_anti_hallucination_options(monkeypatch, tmp_path):

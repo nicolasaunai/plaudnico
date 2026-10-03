@@ -2,8 +2,9 @@ from pathlib import Path
 
 from plaud.models import Word
 
-# Chosen provisionally; Task 9 confirms or replaces it after the real-recording test.
-DEFAULT_MODEL = "mlx-community/whisper-large-v3-turbo"
+# large-v3 beat turbo clearly on a real French meeting (acronyms, overlapping speech)
+# at ~6x real time; see docs/benchmarks/2026-10-v0.md.
+DEFAULT_MODEL = "mlx-community/whisper-large-v3-mlx"
 
 
 def _likely_hallucination(seg: dict) -> bool:
@@ -17,9 +18,9 @@ def words_from_result(result: dict) -> list[Word]:
         if _likely_hallucination(seg):
             continue
         for w in seg.get("words", []):
-            text = w["word"].strip()
-            if text:
-                words.append(Word(text, float(w["start"]), float(w["end"])))
+            # Keep Whisper's leading space: it marks word boundaries ("l" + "'arrêté").
+            if w["word"].strip():
+                words.append(Word(w["word"], float(w["start"]), float(w["end"])))
     return words
 
 

@@ -35,7 +35,9 @@ def group_utterances(words: list[Word]) -> list[Utterance]:
     for w in words:
         if utts and utts[-1].speaker == w.speaker:
             utts[-1].end = w.end
-            utts[-1].text += " " + w.text
+            utts[-1].text += w.text
         else:
             utts.append(Utterance(w.speaker, w.start, w.end, w.text))
+    for u in utts:
+        u.text = u.text.strip()
     return utts

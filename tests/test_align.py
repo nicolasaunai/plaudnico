@@ -40,10 +40,10 @@ def test_no_words():
 
 def test_group_utterances():
     words = [
-        Word("Bonjour", 0.0, 0.4, "Speaker 1"),
-        Word("à", 0.4, 0.5, "Speaker 1"),
-        Word("Merci.", 2.1, 2.5, "Speaker 2"),
-        Word("Bien.", 3.0, 3.4, "Speaker 1"),
+        Word(" Bonjour", 0.0, 0.4, "Speaker 1"),
+        Word(" à", 0.4, 0.5, "Speaker 1"),
+        Word(" Merci.", 2.1, 2.5, "Speaker 2"),
+        Word(" Bien.", 3.0, 3.4, "Speaker 1"),
     ]
     assert group_utterances(words) == [
         Utterance("Speaker 1", 0.0, 0.5, "Bonjour à"),
@@ -54,3 +54,10 @@ def test_group_utterances():
 
 def test_group_utterances_empty():
     assert group_utterances([]) == []
+
+
+def test_group_utterances_keeps_whisper_spacing():
+    # Whisper attaches apostrophes and hyphens to the next word, without a leading space.
+    words = [Word(w, i, i + 0.1, "Speaker 1")
+             for i, w in enumerate([" C", "'est", " l", "'arrêté,", " est", "-ce", " vrai ?"])]
+    assert group_utterances(words)[0].text == "C'est l'arrêté, est-ce vrai ?"
