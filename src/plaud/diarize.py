@@ -36,13 +36,24 @@ def label_speakers(raw: list[tuple[float, float, str]]) -> list[Turn]:
     return turns
 
 
-def diarize(wav: Path, num_speakers: int | None = None, device: str = "mps") -> list[Turn]:
+def resolve_device(device: str, torch) -> str:
+    """'auto' picks an NVIDIA GPU, then the Apple GPU, then the CPU."""
+    if device != "auto":
+        return device
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
+def diarize(wav: Path, num_speakers: int | None = None, device: str = "auto") -> list[Turn]:
     import soundfile as sf
     import torch
     from pyannote.audio import Pipeline
 
     pipeline = Pipeline.from_pretrained(PIPELINE, token=hf_token())
-    pipeline.to(torch.device(device))
+    pipeline.to(torch.device(resolve_device(device, torch)))
     data, sr = sf.read(str(wav), dtype="float32")
     audio = {"waveform": torch.from_numpy(data).unsqueeze(0), "sample_rate": sr}
     kwargs = {"num_speakers": num_speakers} if num_speakers else {}

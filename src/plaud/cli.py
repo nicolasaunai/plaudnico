@@ -7,7 +7,7 @@ from plaud.diarize import DiarizeError, hf_token
 from plaud.meeting import create_or_get
 from plaud.pipeline import process
 from plaud.report import ReportError, load_template
-from plaud.transcribe import DEFAULT_MODEL
+from plaud.transcribe import default_model
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -17,10 +17,12 @@ def _parser() -> argparse.ArgumentParser:
     pp.add_argument("audio", type=Path)
     pp.add_argument("--template", default="minutes",
                     help="comma-separated template names, or 'none' (default: minutes)")
-    pp.add_argument("--model", default=DEFAULT_MODEL, help="mlx-whisper model repo")
+    pp.add_argument("--model", default=None,
+                    help=f"Whisper model (default: {default_model()} on this machine)")
     pp.add_argument("--language", default=None, help="force language (e.g. fr, en); default: detect")
     pp.add_argument("--speakers", type=int, default=None, help="number of speakers, if known")
-    pp.add_argument("--device", default="mps", choices=["mps", "cpu"], help="diarization device")
+    pp.add_argument("--device", default="auto", choices=["auto", "cuda", "mps", "cpu"],
+                    help="diarization device (default: auto)")
     pp.add_argument("--force", action="store_true", help="recompute all stages")
     return p
 
@@ -39,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
             load_template(t)
         meeting_dir = create_or_get(args.audio)
         print(meeting_dir)
-        process(meeting_dir, templates=templates, model=args.model,
+        process(meeting_dir, templates=templates, model=args.model or default_model(),
                 language=args.language, num_speakers=args.speakers,
                 device=args.device, force=args.force)
     except (AudioError, DiarizeError, ReportError) as e:
