@@ -54,7 +54,8 @@ This tool is built for recordings that may contain sensitive conversations.
 
 - One of:
   - **macOS 14 (Sonoma) or later on Apple Silicon** (M1 or later). This is the main platform; it was tested on a real meeting.
-  - **Linux**, ideally with an NVIDIA GPU (CUDA 12). Without a GPU it works on the CPU, but large-v3 is slow there (expect at least the meeting's duration). Linux is covered by the unit tests and by a CPU-only run, but has not yet been tried on a real Linux machine with a GPU.
+  - **Linux** (x86_64 or aarch64), ideally with an NVIDIA GPU and driver 525 or newer: the CUDA 12 libraries come with the install. If the GPU can't be used, transcription falls back to the CPU with a warning. On CPU only, large-v3 is slow (expect at least the meeting's duration). Linux is covered by the unit tests, by CI and by a CPU-only run, but has not yet been tried on a real machine with an NVIDIA GPU.
+  - Intel Macs are not supported: PyTorch no longer publishes packages for them.
 - [uv](https://docs.astral.sh/uv/) and [ffmpeg](https://ffmpeg.org/): `brew install uv ffmpeg` on macOS, `sudo apt install ffmpeg` plus the [uv installer](https://docs.astral.sh/uv/getting-started/installation/) on Linux
 - [Claude Code](https://claude.com/claude-code), logged in. Only needed for reports.
 - A free [Hugging Face](https://huggingface.co) account, to download the speaker-separation model once:
@@ -70,7 +71,7 @@ cd plaudnico
 uv sync
 ```
 
-The first run downloads the models (about 3 GB for Whisper large-v3, plus the pyannote model). On Linux, `uv sync` also installs PyTorch with its CUDA libraries (several GB).
+The first run downloads the models (about 3 GB for Whisper large-v3, plus the pyannote model). On Linux, `uv sync` also installs PyTorch's CUDA 12 build and its CUDA libraries (several GB).
 
 ## Usage
 
