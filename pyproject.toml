@@ -4,7 +4,9 @@ version = "0.1.0"
 license = "MIT"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "mlx-whisper>=0.4.3",
+    # Apple Silicon: Whisper on the Mac GPU. Elsewhere (Linux, Intel Mac): faster-whisper.
+    "mlx-whisper>=0.4.3; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "faster-whisper>=1.1",
     "pyannote.audio>=4.0,<5",
     "soundfile>=0.12",
     "torch>=2.4",
