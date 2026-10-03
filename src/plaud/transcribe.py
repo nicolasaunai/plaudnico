@@ -3,7 +3,7 @@ from pathlib import Path
 from plaud.models import Word
 
 # large-v3 beat turbo clearly on a real French meeting (acronyms, overlapping speech)
-# at ~6x real time; see docs/benchmarks/2026-10-v0.md.
+# at ~6x real time.
 DEFAULT_MODEL = "mlx-community/whisper-large-v3-mlx"
 
 
