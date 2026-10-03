@@ -149,3 +149,7 @@ Known limits:
 - a speaker change can cut a sentence in two;
 - language is detected once per file, so mixed-language meetings are not handled yet;
 - overlapping speech and distant voices in large rooms reduce accuracy.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
