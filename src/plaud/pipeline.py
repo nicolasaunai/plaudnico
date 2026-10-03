@@ -9,7 +9,7 @@ from plaud.diarize import diarize
 from plaud.models import Turn, Word, dump
 from plaud.render import render_transcript
 from plaud.report import build_prompt, load_template, run_claude
-from plaud.transcribe import transcribe
+from plaud.transcribe import backend, transcribe
 
 
 def _write_atomic(path: Path, text: str) -> None:
@@ -52,7 +52,7 @@ def process(meeting_dir: Path, templates: list[str], model: str,
     turns = [Turn(**t) for t in diar_data["turns"]]
 
     asr = meeting_dir / "asr.json"
-    asr_params = {"model": model, "language": language}
+    asr_params = {"backend": backend(), "model": model, "language": language}
     asr_data = _cached(asr, asr_params, force)
     if asr_data is None:
         log(f"Transcribing with {model}…")

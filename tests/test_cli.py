@@ -80,3 +80,27 @@ def test_corrupt_audio_exit_1(env, monkeypatch, capsys):
     monkeypatch.setattr(cli, "process", boom)
     assert cli.main(["process", str(audio)]) == 1
     assert "could not read" in capsys.readouterr().err
+
+
+def test_defaults_device_auto_and_backend_model(env):
+    from plaud.transcribe import default_model
+
+    _, audio, seen = env
+    assert cli.main(["process", str(audio)]) == 0
+    assert seen["kw"]["device"] == "auto"
+    assert seen["kw"]["model"] == default_model()
+
+
+def test_device_cuda_accepted(env):
+    _, audio, seen = env
+    assert cli.main(["process", str(audio), "--device", "cuda"]) == 0
+    assert seen["kw"]["device"] == "cuda"
+
+
+def test_bad_backend_exit_1(env, monkeypatch, capsys):
+    tmp, audio, seen = env
+    monkeypatch.setenv("PLAUD_ASR_BACKEND", "bogus")
+    assert cli.main(["process", str(audio)]) == 1
+    assert "PLAUD_ASR_BACKEND" in capsys.readouterr().err
+    assert seen == {}
+    assert not (tmp / "arch").exists()

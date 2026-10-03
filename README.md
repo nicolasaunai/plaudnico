@@ -1,6 +1,8 @@
 # plaudnico
 
-**Local meeting transcription on a Mac: who said what, plus a written report.**
+[![tests](https://github.com/nicolasaunai/plaudnico/actions/workflows/tests.yml/badge.svg)](https://github.com/nicolasaunai/plaudnico/actions/workflows/tests.yml)
+
+**Local meeting transcription: who said what, plus a written report.** Built for Apple Silicon Macs, also runs on Linux.
 
 Record a meeting with your phone or Mac. `plaud` transcribes it, separates the speakers and asks Claude to write the minutes.
 Audio never leaves your machine; only the transcript text is sent to Claude.
@@ -26,7 +28,7 @@ Report: …/report-minutes.md
 
 ## Features
 
-- **Speech to text on the Mac's GPU** with [mlx-whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) (Whisper large-v3). French, English and the 90+ other Whisper languages, detected automatically.
+- **Speech to text** with Whisper large-v3. On Apple Silicon it runs on the Mac's GPU with [mlx-whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper). Elsewhere it uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper), on an NVIDIA GPU if there is one, otherwise on the CPU. French, English and the 90+ other Whisper languages are detected automatically.
 - **Speaker separation** with [pyannote](https://github.com/pyannote/pyannote-audio) (`speaker-diarization-community-1`): speakers get anonymous labels (`Speaker 1`, `Speaker 2`, …).
 - **Reports written by Claude** from Markdown templates, in the language of the meeting.
 - **One folder per meeting**, with every intermediate result kept. Rerunning is instant unless something changed.
@@ -50,8 +52,11 @@ This tool is built for recordings that may contain sensitive conversations.
 
 ## Requirements
 
-- macOS on Apple Silicon (M1 or later)
-- [uv](https://docs.astral.sh/uv/) and [ffmpeg](https://ffmpeg.org/): `brew install uv ffmpeg`
+- One of:
+  - **macOS 14 (Sonoma) or later on Apple Silicon** (M1 or later). This is the main platform; it was tested on a real meeting.
+  - **Linux** (x86_64 or aarch64), ideally with an NVIDIA GPU and driver 525 or newer: the CUDA 12 libraries come with the install. If the GPU can't be used, transcription falls back to the CPU with a warning. On CPU only, large-v3 is slow (expect at least the meeting's duration). Linux is covered by the unit tests, by CI and by a CPU-only run, but has not yet been tried on a real machine with an NVIDIA GPU.
+  - Intel Macs are not supported: PyTorch no longer publishes packages for them.
+- [uv](https://docs.astral.sh/uv/) and [ffmpeg](https://ffmpeg.org/): `brew install uv ffmpeg` on macOS, `sudo apt install ffmpeg` plus the [uv installer](https://docs.astral.sh/uv/getting-started/installation/) on Linux
 - [Claude Code](https://claude.com/claude-code), logged in. Only needed for reports.
 - A free [Hugging Face](https://huggingface.co) account, to download the speaker-separation model once:
   1. Accept the conditions of [pyannote/speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1).
@@ -66,7 +71,7 @@ cd plaudnico
 uv sync
 ```
 
-The first run downloads the models (about 3 GB for Whisper large-v3, plus the pyannote model).
+The first run downloads the models (about 3 GB for Whisper large-v3, plus the pyannote model). On Linux, `uv sync` also installs PyTorch's CUDA 12 build and its CUDA libraries (several GB).
 
 ## Usage
 
@@ -79,8 +84,8 @@ uv run plaud process <audio file> [options]
 | `--template NAME[,NAME…]` | `minutes` | Report template(s) from `templates/`, or `none` for transcript only |
 | `--language CODE` | auto | Force the language (`fr`, `en`, …) if detection gets it wrong |
 | `--speakers N` | auto | Number of speakers, if you know it (helps separation) |
-| `--model REPO` | `mlx-community/whisper-large-v3-mlx` | Any mlx-whisper model, e.g. `mlx-community/whisper-large-v3-turbo` (faster, less accurate) |
-| `--device mps\|cpu` | `mps` | Device for speaker separation |
+| `--model NAME` | large-v3 | Whisper model: on a Mac, an mlx-whisper repo such as `mlx-community/whisper-large-v3-turbo` (faster, less accurate); on Linux, a faster-whisper name such as `large-v3-turbo` or `medium` |
+| `--device auto\|cuda\|mps\|cpu` | `auto` | Device for speaker separation: NVIDIA GPU, then Apple GPU, then CPU |
 | `--force` | off | Recompute every stage |
 
 Any format ffmpeg reads works: `.m4a` from iPhone Voice Memos (*Dictaphone* in French), `.mp3`, `.wav`… For best results, set Voice Memos to **Lossless** audio quality and put the phone in the middle of the table.
@@ -120,6 +125,8 @@ audio ─► ffmpeg (16 kHz mono) ─► pyannote: who speaks when ─┐
                                └► Whisper: words + times ────┴─► align ─► transcript.md ─► claude -p ─► report
 ```
 
+`PLAUD_ASR_BACKEND=faster-whisper` forces the faster-whisper backend on a Mac too, which is useful for testing.
+
 Each word is given to the speaker turn it overlaps most. Words that fall in a gap go to the nearest turn less than 1 s away; otherwise they are marked `Unknown speaker`.
 
 On an M-series MacBook, a 13-minute French meeting took:
@@ -131,7 +138,7 @@ On an M-series MacBook, a 13-minute French meeting took:
 
 ```bash
 uv run pytest            # fast unit tests, no models needed
-uv run pytest -m slow    # real models; needs HF_TOKEN and macOS `say` voices
+uv run pytest -m slow    # real models; needs HF_TOKEN and text-to-speech (macOS `say` or Linux `espeak-ng`)
 ```
 
 ## Status and roadmap

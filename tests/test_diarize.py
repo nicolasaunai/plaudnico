@@ -39,3 +39,33 @@ def test_pyannote_telemetry_forced_off(monkeypatch):
     import os
     assert os.environ["PYANNOTE_METRICS_ENABLED"] == "false"
     assert os.environ["HF_HUB_DISABLE_TELEMETRY"] == "1"
+
+
+def _torch(cuda, mps):
+    from types import SimpleNamespace as ns
+    return ns(cuda=ns(is_available=lambda: cuda),
+              backends=ns(mps=ns(is_available=lambda: mps)))
+
+
+def test_resolve_device_auto():
+    from plaud.diarize import resolve_device
+
+    assert resolve_device("auto", _torch(cuda=True, mps=False)) == "cuda"
+    assert resolve_device("auto", _torch(cuda=False, mps=True)) == "mps"
+    assert resolve_device("auto", _torch(cuda=False, mps=False)) == "cpu"
+
+
+def test_resolve_device_explicit():
+    from plaud.diarize import resolve_device
+
+    assert resolve_device("cpu", _torch(cuda=True, mps=True)) == "cpu"
+
+
+def test_resolve_device_unavailable_is_clear_error():
+    # Look the class up now: test_pyannote_telemetry_forced_off reloads the module.
+    from plaud.diarize import DiarizeError, resolve_device
+
+    with pytest.raises(DiarizeError, match="cuda"):
+        resolve_device("cuda", _torch(cuda=False, mps=True))
+    with pytest.raises(DiarizeError, match="mps"):
+        resolve_device("mps", _torch(cuda=True, mps=False))
