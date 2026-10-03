@@ -7,7 +7,7 @@ from plaud.diarize import DiarizeError, hf_token
 from plaud.meeting import create_or_get
 from plaud.pipeline import process
 from plaud.report import ReportError, load_template
-from plaud.transcribe import default_model
+from plaud.transcribe import TranscribeError, default_model
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -18,7 +18,7 @@ def _parser() -> argparse.ArgumentParser:
     pp.add_argument("--template", default="minutes",
                     help="comma-separated template names, or 'none' (default: minutes)")
     pp.add_argument("--model", default=None,
-                    help=f"Whisper model (default: {default_model()} on this machine)")
+                    help="Whisper model (default: large-v3 for this machine's backend)")
     pp.add_argument("--language", default=None, help="force language (e.g. fr, en); default: detect")
     pp.add_argument("--speakers", type=int, default=None, help="number of speakers, if known")
     pp.add_argument("--device", default="auto", choices=["auto", "cuda", "mps", "cpu"],
@@ -37,14 +37,15 @@ def main(argv: list[str] | None = None) -> int:
     try:
         # Fail fast, before creating folders or loading models.
         hf_token()
+        model = args.model or default_model()
         for t in templates:
             load_template(t)
         meeting_dir = create_or_get(args.audio)
         print(meeting_dir)
-        process(meeting_dir, templates=templates, model=args.model or default_model(),
+        process(meeting_dir, templates=templates, model=model,
                 language=args.language, num_speakers=args.speakers,
                 device=args.device, force=args.force)
-    except (AudioError, DiarizeError, ReportError) as e:
+    except (AudioError, DiarizeError, ReportError, TranscribeError) as e:
         print(f"plaud: {e}", file=sys.stderr)
         return 1
     return 0

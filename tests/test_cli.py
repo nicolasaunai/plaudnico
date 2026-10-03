@@ -95,3 +95,12 @@ def test_device_cuda_accepted(env):
     _, audio, seen = env
     assert cli.main(["process", str(audio), "--device", "cuda"]) == 0
     assert seen["kw"]["device"] == "cuda"
+
+
+def test_bad_backend_exit_1(env, monkeypatch, capsys):
+    tmp, audio, seen = env
+    monkeypatch.setenv("PLAUD_ASR_BACKEND", "bogus")
+    assert cli.main(["process", str(audio)]) == 1
+    assert "PLAUD_ASR_BACKEND" in capsys.readouterr().err
+    assert seen == {}
+    assert not (tmp / "arch").exists()

@@ -144,3 +144,12 @@ def test_stage_failure_leaves_no_cache_file(meeting, monkeypatch):
         run(d)
     assert not (d / "asr.json").exists()
     assert not list(d.glob("*.tmp"))
+
+
+def test_changed_backend_recomputes_transcription(meeting, monkeypatch):
+    d, calls = meeting
+    monkeypatch.setenv("PLAUD_ASR_BACKEND", "mlx")
+    run(d)
+    monkeypatch.setenv("PLAUD_ASR_BACKEND", "faster-whisper")
+    run(d)
+    assert calls["transcribe"] == 2

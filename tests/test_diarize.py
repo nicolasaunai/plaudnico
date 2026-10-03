@@ -59,3 +59,13 @@ def test_resolve_device_explicit():
     from plaud.diarize import resolve_device
 
     assert resolve_device("cpu", _torch(cuda=True, mps=True)) == "cpu"
+
+
+def test_resolve_device_unavailable_is_clear_error():
+    # Look the class up now: test_pyannote_telemetry_forced_off reloads the module.
+    from plaud.diarize import DiarizeError, resolve_device
+
+    with pytest.raises(DiarizeError, match="cuda"):
+        resolve_device("cuda", _torch(cuda=False, mps=True))
+    with pytest.raises(DiarizeError, match="mps"):
+        resolve_device("mps", _torch(cuda=True, mps=False))

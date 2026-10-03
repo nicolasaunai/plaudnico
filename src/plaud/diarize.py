@@ -38,13 +38,13 @@ def label_speakers(raw: list[tuple[float, float, str]]) -> list[Turn]:
 
 def resolve_device(device: str, torch) -> str:
     """'auto' picks an NVIDIA GPU, then the Apple GPU, then the CPU."""
-    if device != "auto":
-        return device
-    if torch.cuda.is_available():
-        return "cuda"
-    if torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
+    available = {"cuda": torch.cuda.is_available(), "mps": torch.backends.mps.is_available()}
+    if device == "auto":
+        return next((d for d, ok in available.items() if ok), "cpu")
+    if device in available and not available[device]:
+        raise DiarizeError(f"--device {device} requested, but no {device} device is available"
+                           " (use --device auto or cpu)")
+    return device
 
 
 def diarize(wav: Path, num_speakers: int | None = None, device: str = "auto") -> list[Turn]:
