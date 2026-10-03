@@ -1,4 +1,5 @@
 import subprocess
+import tempfile
 from pathlib import Path
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "templates"
@@ -38,10 +39,22 @@ def build_prompt(template: str, transcript: str) -> str:
     return PROMPT.format(template=template.strip(), transcript=transcript.strip())
 
 
+CLAUDE_TIMEOUT = 600
+
+
 def run_claude(prompt: str, runner=subprocess.run) -> str:
-    # No tools: Claude only reads the prompt text and returns Markdown.
-    cmd = ["claude", "-p", "--tools", "", "--output-format", "text"]
-    res = runner(cmd, input=prompt, capture_output=True, text=True)
+    # No tools, no MCP servers, no user/project settings or CLAUDE.md, neutral cwd:
+    # Claude only reads the prompt text and returns Markdown.
+    cmd = ["claude", "-p", "--tools", "", "--strict-mcp-config", "--setting-sources", "",
+           "--output-format", "text"]
+    try:
+        with tempfile.TemporaryDirectory() as cwd:
+            res = runner(cmd, input=prompt, capture_output=True, text=True,
+                         encoding="utf-8", cwd=cwd, timeout=CLAUDE_TIMEOUT)
+    except FileNotFoundError:
+        raise ReportError("claude CLI not found on PATH") from None
+    except subprocess.TimeoutExpired:
+        raise ReportError(f"claude -p timed out after {CLAUDE_TIMEOUT} s") from None
     if res.returncode != 0:
         raise ReportError(f"claude -p failed ({res.returncode}): {res.stderr.strip()}")
     if not res.stdout.strip():

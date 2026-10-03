@@ -97,3 +97,50 @@ def test_no_templates(meeting):
     d, calls = meeting
     assert run(d, templates=[]) == []
     assert calls["claude"] == 0
+
+
+def test_changed_language_recomputes_transcription(meeting):
+    d, calls = meeting
+    run(d)
+    run(d, language="fr")
+    assert calls["transcribe"] == 2
+    assert calls["diarize"] == 1
+
+
+def test_changed_model_recomputes_transcription(meeting):
+    d, calls = meeting
+    run(d)
+    run(d, model="other")
+    assert calls["transcribe"] == 2
+
+
+def test_changed_speaker_count_recomputes_diarization(meeting):
+    d, calls = meeting
+    run(d)
+    run(d, num_speakers=3)
+    assert calls["diarize"] == 2
+    assert calls["transcribe"] == 1
+
+
+def test_diarize_runs_before_transcribe(meeting, monkeypatch):
+    d, _ = meeting
+    order = []
+    monkeypatch.setattr(pipeline, "diarize",
+                        lambda wav, num_speakers, device: order.append("d") or [])
+    monkeypatch.setattr(pipeline, "transcribe",
+                        lambda wav, model, language: order.append("t") or ([], "fr"))
+    run(d)
+    assert order == ["d", "t"]
+
+
+def test_stage_failure_leaves_no_cache_file(meeting, monkeypatch):
+    d, _ = meeting
+
+    def boom(wav, model, language):
+        raise RuntimeError("model crashed")
+
+    monkeypatch.setattr(pipeline, "transcribe", boom)
+    with pytest.raises(RuntimeError):
+        run(d)
+    assert not (d / "asr.json").exists()
+    assert not list(d.glob("*.tmp"))

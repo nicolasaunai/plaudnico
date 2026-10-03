@@ -2,6 +2,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from plaud.audio import AudioError
 from plaud.diarize import DiarizeError, hf_token
 from plaud.meeting import create_or_get
 from plaud.pipeline import process
@@ -41,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
         process(meeting_dir, templates=templates, model=args.model,
                 language=args.language, num_speakers=args.speakers,
                 device=args.device, force=args.force)
-    except (DiarizeError, ReportError) as e:
+    except (AudioError, DiarizeError, ReportError) as e:
         print(f"plaud: {e}", file=sys.stderr)
         return 1
     return 0

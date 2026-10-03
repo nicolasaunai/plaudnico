@@ -52,3 +52,30 @@ def test_run_claude_empty_output():
     run, _ = _runner(stdout="  \n")
     with pytest.raises(ReportError, match="empty"):
         run_claude("P", runner=run)
+
+
+def test_run_claude_isolated_from_user_config():
+    run, calls = _runner()
+    run_claude("P", runner=run)
+    cmd, kw = calls[0]
+    assert "--strict-mcp-config" in cmd
+    assert cmd[cmd.index("--setting-sources") + 1] == ""
+    assert kw["cwd"]  # neutral dir, not the caller's project
+    assert kw["timeout"] > 0
+    assert kw["encoding"] == "utf-8"
+
+
+def test_run_claude_not_installed():
+    def run(cmd, **kw):
+        raise FileNotFoundError("claude")
+
+    with pytest.raises(ReportError, match="not found"):
+        run_claude("P", runner=run)
+
+
+def test_run_claude_timeout():
+    def run(cmd, **kw):
+        raise subprocess.TimeoutExpired(cmd, kw["timeout"])
+
+    with pytest.raises(ReportError, match="timed out"):
+        run_claude("P", runner=run)

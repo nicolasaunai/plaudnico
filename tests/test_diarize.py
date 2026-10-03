@@ -26,3 +26,16 @@ def test_hf_token_missing(monkeypatch):
 def test_hf_token_present(monkeypatch):
     monkeypatch.setenv("HF_TOKEN", "hf_abc")
     assert hf_token() == "hf_abc"
+
+
+def test_pyannote_telemetry_forced_off(monkeypatch):
+    import importlib
+
+    import plaud.diarize
+
+    monkeypatch.setenv("PYANNOTE_METRICS_ENABLED", "true")
+    monkeypatch.delenv("HF_HUB_DISABLE_TELEMETRY", raising=False)
+    importlib.reload(plaud.diarize)
+    import os
+    assert os.environ["PYANNOTE_METRICS_ENABLED"] == "false"
+    assert os.environ["HF_HUB_DISABLE_TELEMETRY"] == "1"

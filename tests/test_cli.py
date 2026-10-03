@@ -68,3 +68,15 @@ def test_report_error_exit_1(env, monkeypatch, capsys):
     monkeypatch.setattr(cli, "process", boom)
     assert cli.main(["process", str(audio)]) == 1
     assert "auth error" in capsys.readouterr().err
+
+
+def test_corrupt_audio_exit_1(env, monkeypatch, capsys):
+    _, audio, _ = env
+    from plaud.audio import AudioError
+
+    def boom(d, **kw):
+        raise AudioError("ffmpeg could not read a.m4a: Invalid data")
+
+    monkeypatch.setattr(cli, "process", boom)
+    assert cli.main(["process", str(audio)]) == 1
+    assert "could not read" in capsys.readouterr().err

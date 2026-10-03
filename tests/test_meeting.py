@@ -49,3 +49,26 @@ def test_different_files_same_minute_and_name(tmp_path):
     d2 = create_or_get(b, archive=arch, when=when)
     assert d1 != d2
     assert d2.name == "2026-10-03_1015_a-2"
+
+
+def test_interrupted_creation_leaves_no_half_folder(tmp_path, monkeypatch):
+    import shutil
+
+    import pytest
+
+    audio = tmp_path / "a.m4a"
+    audio.write_bytes(b"x")
+    arch = tmp_path / "arch"
+    when = datetime(2026, 10, 3, 10, 15)
+
+    def boom(*a, **k):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(shutil, "copy2", boom)
+    with pytest.raises(KeyboardInterrupt):
+        create_or_get(audio, archive=arch, when=when)
+    monkeypatch.undo()
+    d = create_or_get(audio, archive=arch, when=when)
+    assert d.name == "2026-10-03_1015_a"
+    assert [p.name for p in d.parent.iterdir()] == [d.name]
+

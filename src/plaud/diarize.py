@@ -3,6 +3,10 @@ from pathlib import Path
 
 from plaud.models import Turn
 
+# Nothing but transcript text may leave the Mac: pyannote sends usage metrics by default.
+os.environ["PYANNOTE_METRICS_ENABLED"] = "false"
+os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+
 # Open-source, runs locally. Never switch to "precision-2": it uploads audio.
 PIPELINE = "pyannote/speaker-diarization-community-1"
 

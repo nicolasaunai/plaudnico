@@ -47,3 +47,31 @@ def test_transcribe_real_model(tmp_path):
     words, lang = transcribe(to_wav(aiff, tmp_path / "s.wav"))
     assert lang == "en"
     assert "meeting" in " ".join(w.text.lower() for w in words)
+
+
+def test_words_from_result_drops_likely_hallucinated_segments():
+    result = {"segments": [
+        {"no_speech_prob": 0.9, "avg_logprob": -1.5,
+         "words": [{"word": " Sous-titres", "start": 0.0, "end": 1.0}]},
+        {"no_speech_prob": 0.9, "avg_logprob": -0.2,
+         "words": [{"word": " Oui.", "start": 1.0, "end": 1.2}]},
+    ]}
+    assert words_from_result(result) == [Word("Oui.", 1.0, 1.2)]
+
+
+def test_transcribe_passes_anti_hallucination_options(monkeypatch, tmp_path):
+    import sys
+    import types
+
+    from plaud.transcribe import transcribe
+
+    seen = {}
+
+    def fake(audio, **kw):
+        seen.update(kw)
+        return {"language": "fr", "segments": []}
+
+    monkeypatch.setitem(sys.modules, "mlx_whisper", types.SimpleNamespace(transcribe=fake))
+    assert transcribe(tmp_path / "x.wav") == ([], "fr")
+    assert seen["condition_on_previous_text"] is False
+    assert seen["hallucination_silence_threshold"] > 0

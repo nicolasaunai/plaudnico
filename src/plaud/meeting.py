@@ -45,10 +45,19 @@ def create_or_get(audio: Path, archive: Path | None = None,
     d, i = archive / f"{when:%Y}" / base, 2
     while d.exists():
         d, i = archive / f"{when:%Y}" / f"{base}-{i}", i + 1
-    d.mkdir(parents=True)
-    shutil.copy2(audio, d / f"audio{audio.suffix.lower()}")
-    meta = {"id": digest, "source": str(audio),
-            "start": when.isoformat(timespec="minutes"), "title": audio.stem}
-    (d / "meeting.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1),
-                                    encoding="utf-8")
+    # Build in a hidden temp folder, then rename: an interrupted copy never leaves
+    # a half-made meeting folder behind.
+    tmp = d.with_name(f".tmp-{d.name}")
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True)
+    try:
+        shutil.copy2(audio, tmp / f"audio{audio.suffix.lower()}")
+        meta = {"id": digest, "source": str(audio),
+                "start": when.isoformat(timespec="minutes"), "title": audio.stem}
+        (tmp / "meeting.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1),
+                                          encoding="utf-8")
+    except BaseException:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    tmp.rename(d)
     return d
